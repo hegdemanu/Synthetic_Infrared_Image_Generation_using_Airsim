@@ -1,0 +1,7 @@
+
+# Ignore all files in these directories
+*
+# But not the directories themselves and not .gitkeep files
+!*/
+!.gitkeep
+!README.md
