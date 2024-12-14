@@ -99,16 +99,47 @@ airsim-ir-gan/
 │   ├── capture/        # Image capture utilities
 │   └── thermal/        # Thermal modeling
 sir-gan/
-├── configs/           # Configuration files
-├── data/             # Dataset storage
-├── models/           # Network architectures
+│
+├── models/
+│   ├── __init__.py
 │   ├── generator.py
 │   └── discriminator.py
-├── losses/           # Loss function implementations
-├── utils/            # Utility functions
-├── train.py          # Training script
-├── test.py           # Testing script
-└── evaluate.py       # Evaluation metrics
+│
+├── losses/
+│   ├── __init__.py
+│   └── sir_losses.py
+│
+├── utils/
+│   ├── __init__.py
+│   ├── dataset.py
+│   ├── metrics.py
+│   ├── visualization.py
+│   ├── checkpoint.py
+│   ├── lr_scheduler.py
+│   └── config.py
+│
+├── scripts/
+│   ├── train.py
+│   └── inference.py
+│
+├── configs/
+│   └── default_config.yaml
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_generator.py
+│   ├── test_discriminator.py
+│   └── test_losses.py
+│
+├── data/
+│   ├── simulated/
+│   └── real/
+│
+├── requirements.txt
+├── setup.py
+├── LICENSE
+├── .gitignore
+└── README.md
 ```
 
 ## Usage Guide
