@@ -98,14 +98,17 @@ airsim-ir-gan/
 │   ├── environment/    # Environment configuration
 │   ├── capture/        # Image capture utilities
 │   └── thermal/        # Thermal modeling
-├── sir_gan/            # SIR-GAN implementation
-│   ├── models/        # Network architectures
-│   ├── losses/        # Loss functions
-│   └── utils/         # Utility functions
-├── configs/            # Configuration files
-├── scripts/            # Utility scripts
-├── data/              # Dataset storage
-└── examples/           # Usage examples
+sir-gan/
+├── configs/           # Configuration files
+├── data/             # Dataset storage
+├── models/           # Network architectures
+│   ├── generator.py
+│   └── discriminator.py
+├── losses/           # Loss function implementations
+├── utils/            # Utility functions
+├── train.py          # Training script
+├── test.py           # Testing script
+└── evaluate.py       # Evaluation metrics
 ```
 
 ## Usage Guide
