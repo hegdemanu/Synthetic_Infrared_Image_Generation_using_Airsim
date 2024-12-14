@@ -1,0 +1,14 @@
+The Discriminator implementation includes several key features:
+
+Dilated convolutions with increasing dilation rates (1, 2, 4) for preserving spatial hierarchy.
+Instance normalization for style-based discrimination.
+PatchGAN architecture for local and global feature discrimination.
+LeakyReLU activation for stable training.
+Proper weight initialization methods.
+
+The test script verifies:
+
+Model architecture and parameter count.
+Forward pass functionality and output shapes.
+Receptive field changes from dilated convolutions.
+Weight initialization correctness.
