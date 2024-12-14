@@ -1,0 +1,5 @@
+These utility modules provide:
+Dataset handling with proper image loading and transformations
+Visualization utilities for monitoring training progress
+Checkpoint management for saving and loading model states
+Configuration handling for managing hyperparameters
