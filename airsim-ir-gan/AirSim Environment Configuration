@@ -1,0 +1,190 @@
+from pathlib import Path 
+import json
+import numpy as np
+from datetime import datetime, time
+from typing import Dict, Optional, Union, Tuple
+import airsim
+
+class AfricanEnvironment:
+    """
+    Manages the African environment simulation in AirSim with dynamic time, weather,
+    and thermal properties.
+    """
+    
+    def __init__(self, 
+                 settings_path: Optional[str] = None,
+                 longitude: float = 118.43,  # Default from paper
+                 latitude: float = 44.54,    # Default from paper
+                 altitude: float = 1190):    # Default from paper
+        """
+        Initialize African environment simulation.
+
+        Args:
+            settings_path: Path to AirSim settings file
+            longitude: Location longitude
+            latitude: Location latitude 
+            altitude: Location altitude in meters
+        """
+        self.settings_path = settings_path or str(Path.home() / "Documents" / "AirSim" / "settings.json")
+        self.longitude = longitude
+        self.latitude = latitude
+        self.altitude = altitude
+        
+        # Weather state
+        self.weather_state = {
+            'temperature': 15.2,  # °C
+            'humidity': 50.0,     # %
+            'wind_speed': 2.7,    # m/s
+            'cloud_cover': 0.3,   # 0-1
+            'precipitation': 0.0,  # 0-1
+            'dust': 0.0,          # 0-1
+            'fog': 0.0            # 0-1
+        }
+        
+        # Time state
+        self.current_time = datetime.now().time()
+        
+        # Connect to AirSim
+        self.client = airsim.MultirotorClient()
+        self.client.confirmConnection()
+        
+        # Initialize environment
+        self.setup_environment()
+        
+    def setup_environment(self):
+        """Configure initial environment settings in AirSim."""
+        settings = {
+            "SeeDocsAt": "https://github.com/Microsoft/AirSim/blob/master/docs/settings.md",
+            "SettingsVersion": 1.2,
+            "SimMode": "ComputerVision",
+            "ClockSpeed": 1.0,
+            "ViewMode": "NoDisplay",
+            
+            "CameraDefaults": {
+                "CaptureSettings": [
+                    {
+                        "ImageType": 8,  # Infrared
+                        "Width": 320,
+                        "Height": 240,
+                        "FOV_Degrees": 90,
+                        "AutoExposureSpeed": 100,
+                        "AutoExposureBias": 0,
+                        "AutoExposureMaxBrightness": 0.64,
+                        "AutoExposureMinBrightness": 0.03,
+                        "MotionBlurAmount": 0
+                    }
+                ]
+            },
+            
+            "OriginGeopoint": {
+                "Latitude": self.latitude,
+                "Longitude": self.longitude,
+                "Altitude": self.altitude
+            }
+        }
+        
+        # Save settings
+        with open(self.settings_path, 'w') as f:
+            json.dump(settings, f, indent=2)
+    
+    def set_time_of_day(self, time_: Union[time, str, float]):
+        """
+        Set the simulation time of day.
+        
+        Args:
+            time_: Time as datetime.time object, "HH:MM" string, or float (0-24)
+        """
+        if isinstance(time_, str):
+            hours, minutes = map(int, time_.split(':'))
+            time_ = time(hours, minutes)
+        elif isinstance(time_, float):
+            hours = int(time_)
+            minutes = int((time_ - hours) * 60)
+            time_ = time(hours, minutes)
+            
+        self.current_time = time_
+        
+        # Calculate sun position based on time, latitude, longitude
+        sun_altitude = self._calculate_sun_position()
+        
+        # Update lighting in AirSim
+        self.client.simSetTimeOfDay(True,
+                                  start_datetime=str(datetime.now().date()) + f" {time_}",
+                                  is_start_datetime_dst=False,
+                                  celestial_clock_speed=1,
+                                  update_interval_secs=60)
+
+    def set_weather(self, 
+                   temperature: Optional[float] = None,
+                   humidity: Optional[float] = None,
+                   wind_speed: Optional[float] = None,
+                   cloud_cover: Optional[float] = None,
+                   precipitation: Optional[float] = None,
+                   dust: Optional[float] = None,
+                   fog: Optional[float] = None):
+        """Update weather parameters."""
+        if temperature is not None:
+            self.weather_state['temperature'] = temperature
+        if humidity is not None:
+            self.weather_state['humidity'] = humidity
+        if wind_speed is not None:
+            self.weather_state['wind_speed'] = wind_speed
+        if cloud_cover is not None:
+            self.weather_state['cloud_cover'] = cloud_cover
+        if precipitation is not None:
+            self.weather_state['precipitation'] = precipitation
+        if dust is not None:
+            self.weather_state['dust'] = dust
+        if fog is not None:
+            self.weather_state['fog'] = fog
+            
+        # Update weather in AirSim
+        self.client.simSetWeatherParameter(airsim.WeatherParameter.Rain, 
+                                         self.weather_state['precipitation'])
+        self.client.simSetWeatherParameter(airsim.WeatherParameter.Fog,
+                                         self.weather_state['fog'])
+        self.client.simSetWeatherParameter(airsim.WeatherParameter.Dust,
+                                         self.weather_state['dust'])
+        
+    def _calculate_sun_position(self) -> float:
+        """
+        Calculate sun position based on time and location.
+        
+        Returns:
+            Sun altitude angle in radians
+        """
+        # Convert time to decimal hours
+        hours = self.current_time.hour + self.current_time.minute / 60
+        
+        # Simplified solar position calculation
+        day_of_year = datetime.now().timetuple().tm_yday
+        declination = -23.45 * np.cos(np.radians(360/365 * (day_of_year + 10)))
+        hour_angle = 15 * (hours - 12)
+        
+        # Calculate solar altitude
+        altitude = np.arcsin(
+            np.sin(np.radians(self.latitude)) * np.sin(np.radians(declination)) +
+            np.cos(np.radians(self.latitude)) * np.cos(np.radians(declination)) * 
+            np.cos(np.radians(hour_angle))
+        )
+        
+        return altitude
+        
+    def get_thermal_parameters(self) -> Dict[str, float]:
+        """
+        Get current thermal parameters based on environment state.
+        
+        Returns:
+            Dictionary of thermal parameters
+        """
+        sun_altitude = self._calculate_sun_position()
+        
+        return {
+            'ambient_temperature': self.weather_state['temperature'],
+            'ground_temperature': self.weather_state['temperature'] + 
+                                5 * max(0, np.sin(sun_altitude)),
+            'sky_temperature': self.weather_state['temperature'] - 
+                             20 * (1 - self.weather_state['cloud_cover']),
+            'humidity': self.weather_state['humidity'],
+            'wind_speed': self.weather_state['wind_speed']
+        }
