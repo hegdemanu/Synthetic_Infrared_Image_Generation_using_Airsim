@@ -1,0 +1,23 @@
+#
+
+# Training parameters
+batch_size: 16
+num_epochs: 200
+warmup_epochs: 10
+learning_rate: 0.0002
+num_workers: 4
+
+# Model parameters
+lambda_adv: 1.0
+lambda_cycle: 5.0
+lambda_ir: 2.0
+lambda_struct: 2.0
+
+# Directories
+sim_dir: "data/simulated"
+real_dir: "data/real"
+checkpoint_dir: "checkpoints"
+log_dir: "logs"
+
+# Hardware
+use_gpu: true
