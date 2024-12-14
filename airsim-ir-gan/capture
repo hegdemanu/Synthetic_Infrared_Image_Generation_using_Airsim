@@ -1,0 +1,235 @@
+import airsim
+import numpy as np
+import cv2
+from typing import Dict, List, Tuple, Optional
+from pathlib import Path
+import time
+import json
+
+class IRImageCapture:
+    """
+    Handles IR image capture and segmentation map generation in AirSim.
+    """
+    
+    def __init__(self, 
+                 client: Optional[airsim.MultirotorClient] = None,
+                 camera_config: Optional[Dict] = None):
+        """
+        Initialize IR image capture system.
+        
+        Args:
+            client: AirSim client instance
+            camera_config: Camera configuration parameters
+        """
+        self.client = client or airsim.MultirotorClient()
+        self.client.confirmConnection()
+        
+        # Default camera configuration
+        self.camera_config = camera_config or {
+            'width': 320,
+            'height': 240,
+            'fov_degrees': 90,
+            'capture_interval': 0.1  # seconds
+        }
+        
+        # Segmentation ID mapping for different objects
+        self.seg_id_mapping = {
+            'Base_Terrain': 1,
+            'elephant': 2,
+            'zebra': 3,
+            'Crocodile': 4,
+            'Rhinoceros': 5,
+            'Hippo': 6,
+            'Poacher': 7,
+            'InstancedFoliageActor': 8,
+            'Water_Plane': 9,
+            'truck': 10
+        }
+        
+        # Initialize camera
+        self.setup_camera()
+        
+    def setup_camera(self):
+        """Configure camera settings in AirSim."""
+        # Configure IR camera
+        ir_camera = airsim.ImageRequest(
+            "0", airsim.ImageType.Infrared, False, False)
+        
+        # Configure segmentation camera
+        seg_camera = airsim.ImageRequest(
+            "0", airsim.ImageType.Segmentation, False, False)
+        
+        # Configure scene camera
+        scene_camera = airsim.ImageRequest(
+            "0", airsim.ImageType.Scene, False, False)
+        
+        self.camera_requests = [ir_camera, seg_camera, scene_camera]
+        
+    def set_camera_pose(self, 
+                       position: Tuple[float, float, float],
+                       rotation: Tuple[float, float, float]):
+        """
+        Set camera position and rotation.
+        
+        Args:
+            position: (x, y, z) position in meters
+            rotation: (pitch, roll, yaw) rotation in radians
+        """
+        pose = airsim.Pose(
+            airsim.Vector3r(*position),
+            airsim.to_quaternion(*rotation)
+        )
+        self.client.simSetVehiclePose(pose, True)
+        time.sleep(self.camera_config['capture_interval'])
+        
+    def capture_images(self) -> Dict[str, np.ndarray]:
+        """
+        Capture IR, segmentation, and scene images.
+        
+        Returns:
+            Dictionary containing the captured images
+        """
+        responses = self.client.simGetImages(self.camera_requests)
+        
+        images = {}
+        
+        # Process IR image
+        ir_response = responses[0]
+        ir_img = np.frombuffer(ir_response.image_data_uint8, dtype=np.uint8)
+        images['ir'] = ir_img.reshape(ir_response.height, ir_response.width, 4)[:,:,:3]
+        
+        # Process segmentation image
+        seg_response = responses[1]
+        seg_img = np.frombuffer(seg_response.image_data_uint8, dtype=np.uint8)
+        images['segmentation'] = seg_img.reshape(seg_response.height, 
+                                               seg_response.width, 4)[:,:,:3]
+        
+        # Process scene image
+        scene_response = responses[2]
+        scene_img = np.frombuffer(scene_response.image_data_uint8, dtype=np.uint8)
+        images['scene'] = scene_img.reshape(scene_response.height, 
+                                          scene_response.width, 4)[:,:,:3]
+        
+        return images
+    
+    def generate_capture_positions(self, 
+                                 target_position: Tuple[float, float, float],
+                                 radius_range: Tuple[float, float],
+                                 height_range: Tuple[float, float],
+                                 num_positions: int) -> List[Tuple[Tuple[float, float, float], 
+                                                                 Tuple[float, float, float]]]:
+        """
+        Generate camera positions for multi-angle capture.
+        
+        Args:
+            target_position: Center point to capture
+            radius_range: (min, max) distance from target
+            height_range: (min, max) height range
+            num_positions: Number of positions to generate
+            
+        Returns:
+            List of (position, rotation) tuples
+        """
+        positions = []
+        
+        for i in range(num_positions):
+            # Generate random radius and angle
+            radius = np.random.uniform(*radius_range)
+            angle = np.random.uniform(0, 2 * np.pi)
+            height = np.random.uniform(*height_range)
+            
+            # Calculate position
+            x = target_position[0] + radius * np.cos(angle)
+            y = target_position[1] + radius * np.sin(angle)
+            z = -height  # Negative for AirSim coordinate system
+            
+            # Calculate rotation to look at target
+            dx = target_position[0] - x
+            dy = target_position[1] - y
+            dz = target_position[2] - z
+            
+            # Calculate pitch and yaw
+            yaw = np.arctan2(dy, dx)
+            pitch = np.arctan2(dz, np.sqrt(dx*dx + dy*dy))
+            
+            positions.append(((x, y, z), (pitch, 0, yaw)))
+            
+        return positions
+    
+    def capture_multi_angle(self,
+                          target_position: Tuple[float, float, float],
+                          output_dir: str,
+                          num_angles: int = 10,
+                          radius_range: Tuple[float, float] = (5, 15),
+                          height_range: Tuple[float, float] = (2, 10)) -> List[Dict]:
+        """
+        Capture images from multiple angles around a target.
+        
+        Args:
+            target_position: Target center point
+            output_dir: Directory to save captures
+            num_angles: Number of angles to capture
+            radius_range: Distance range from target
+            height_range: Height range for captures
+            
+        Returns:
+            List of metadata for captured images
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Generate camera positions
+        positions = self.generate_capture_positions(
+            target_position, radius_range, height_range, num_angles)
+        
+        metadata_list = []
+        
+        for i, (position, rotation) in enumerate(positions):
+            # Set camera pose
+            self.set_camera_pose(position, rotation)
+            
+            # Capture images
+            images = self.capture_images()
+            
+            # Save images
+            for img_type, img in images.items():
+                img_path = output_path / f"{img_type}_{i:04d}.png"
+                cv2.imwrite(str(img_path), img)
+            
+            # Create metadata
+            metadata = {
+                'id': i,
+                'position': position,
+                'rotation': rotation,
+                'target_position': target_position,
+                'timestamp': time.time(),
+                'camera_config': self.camera_config
+            }
+            
+            metadata_list.append(metadata)
+            
+            # Save metadata
+            with open(output_path / f"metadata_{i:04d}.json", 'w') as f:
+                json.dump(metadata, f, indent=2)
+                
+        return metadata_list
+    
+    def create_segmentation_map(self, object_temps: Dict[str, float]) -> None:
+        """
+        Create segmentation map based on object temperatures.
+        
+        Args:
+            object_temps: Dictionary mapping object names to temperatures
+        """
+        for obj_name, temperature in object_temps.items():
+            if obj_name in self.seg_id_mapping:
+                # Convert temperature to segmentation ID (0-255)
+                normalized_temp = int((temperature - 273.15) / 100 * 255)
+                seg_id = np.clip(normalized_temp, 0, 255)
+                
+                # Set segmentation ID for object
+                success = self.client.simSetSegmentationObjectID(
+                    f"[\w]*{obj_name}[\w]*", seg_id, True)
+                
+                if not success:
+                    print(f"Failed to set segmentation ID for {obj_name}")
