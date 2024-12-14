@@ -1,0 +1,8 @@
+The loss implementation includes several key components:
+
+Adversarial Loss: For both generator and discriminator training using MSE loss.
+Cycle Consistency Loss: Ensures bidirectional mapping consistency using L1 loss.
+Infrared Loss: Preserves thermal characteristics using radiation value metrics.
+Structure Loss: Maintains structural information using gradient correlation.
+Refinement Loss: Combines infrared and structure losses.
+Total Loss: Weighted combination of all loss components.
