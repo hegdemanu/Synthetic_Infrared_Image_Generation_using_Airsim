@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     description="Synthetic IR Image Refinement using Adversarial Learning",
     author="Manu_hegde",
-    author_email="your.email@example.com",
+    author_email="hegdemanu22@gmail.com",
     packages=find_packages(),
     install_requires=[
         line.strip()
